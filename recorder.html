@@ -2,86 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Say Your Name</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 1em;
-    }
-    button {
-      margin: 0.5em 0.5em 0.5em 0;
-    }
-    audio {
-      display: block;
-      margin-top: 1em;
-    }
-  </style>
 </head>
 <body>
-  <h2>Say Your Name: Record Your Pronunciation</h2>
+  <h3>Say Your Name: Record Your Pronunciation</h3>
 
   <button id="recordBtn">🎤 Start Recording</button>
   <button id="stopBtn" disabled>⏹️ Stop</button>
-
-  <p id="status"></p>
+  <p id="status">Waiting to record...</p>
 
   <audio id="player" controls style="display: none;"></audio>
   <button id="uploadBtn" disabled>⬆️ Upload Recording</button>
   <p id="result"></p>
 
   <script>
-    let mediaRecorder, audioBlob;
+    let mediaRecorder;
+    let audioChunks = [];
 
-    document.getElementById("recordBtn").onclick = async () => {
+    const recordBtn = document.getElementById("recordBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const player = document.getElementById("player");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+
+    recordBtn.onclick = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        status.innerText = "Microphone access is not supported in this browser.";
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
-        const audioChunks = [];
+        audioChunks = [];
 
-        mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+
         mediaRecorder.onstop = () => {
-          audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+          const audioBlob = new Blob(audioChunks);
           const audioUrl = URL.createObjectURL(audioBlob);
-          const audioPlayer = document.getElementById("player");
-          audioPlayer.src = audioUrl;
-          audioPlayer.style.display = "block";
-          document.getElementById("uploadBtn").disabled = false;
-          document.getElementById("status").textContent = "Recording complete.";
+          player.src = audioUrl;
+          player.style.display = "block";
+          uploadBtn.disabled = false;
         };
 
         mediaRecorder.start();
-        document.getElementById("status").textContent = "Recording...";
-        document.getElementById("stopBtn").disabled = false;
-        document.getElementById("recordBtn").disabled = true;
+        status.innerText = "Recording...";
+        recordBtn.disabled = true;
+        stopBtn.disabled = false;
       } catch (err) {
-        console.error("Microphone access denied:", err);
-        alert("This page needs access to your microphone. Please enable it in your browser settings.");
+        console.error("Mic access error:", err);
+        status.innerText = "Microphone access was blocked. Please allow it in your browser settings.";
       }
     };
 
-    document.getElementById("stopBtn").onclick = () => {
+    stopBtn.onclick = () => {
       mediaRecorder.stop();
-      document.getElementById("stopBtn").disabled = true;
+      status.innerText = "Recording stopped. You can now listen or upload.";
+      stopBtn.disabled = true;
     };
 
-    document.getElementById("uploadBtn").onclick = async () => {
+    uploadBtn.onclick = async () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
       const formData = new FormData();
-      formData.append("file", audioBlob, "pronunciation.wav");
+      formData.append("audio", audioBlob, "name-pronunciation.webm");
 
-      try {
-        const res = await fetch("https://204.108.199.80/upload", {
-          method: "POST",
-          body: formData,
-        });
+      status.innerText = "Uploading...";
+      const res = await fetch("https://YOUR_SERVER_URL/upload", {
+        method: "POST",
+        body: formData
+      });
 
-        const data = await res.json();
-        document.getElementById("result").innerHTML = 
-          `✅ Uploaded! <a href="${data.fileUrl}" target="_blank">Listen</a>`;
-        document.getElementById("status").textContent = "Upload complete!";
-      } catch (err) {
-        console.error(err);
-        document.getElementById("status").textContent = "Upload failed.";
-      }
+      const data = await res.json();
+      result.innerHTML = `✅ Uploaded: <a href="${data.fileUrl}" target="_blank">Listen here</a>`;
+      status.innerText = "Upload complete!";
     };
   </script>
 </body>
