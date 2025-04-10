@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Say Your Name</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 1em;
+    }
+    button {
+      margin: 0.5em 0.5em 0.5em 0;
+    }
+    audio {
+      display: block;
+      margin-top: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h2>Say Your Name: Record Your Pronunciation</h2>
+
+  <button id="recordBtn">🎤 Start Recording</button>
+  <button id="stopBtn" disabled>⏹️ Stop</button>
+
+  <p id="status"></p>
+
+  <audio id="player" controls style="display: none;"></audio>
+  <button id="uploadBtn" disabled>⬆️ Upload Recording</button>
+  <p id="result"></p>
+
+  <script>
+    let mediaRecorder, audioBlob;
+
+    document.getElementById("recordBtn").onclick = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        const audioChunks = [];
+
+        mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+        mediaRecorder.onstop = () => {
+          audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audioPlayer = document.getElementById("player");
+          audioPlayer.src = audioUrl;
+          audioPlayer.style.display = "block";
+          document.getElementById("uploadBtn").disabled = false;
+          document.getElementById("status").textContent = "Recording complete.";
+        };
+
+        mediaRecorder.start();
+        document.getElementById("status").textContent = "Recording...";
+        document.getElementById("stopBtn").disabled = false;
+        document.getElementById("recordBtn").disabled = true;
+      } catch (err) {
+        console.error("Microphone access denied:", err);
+        alert("This page needs access to your microphone. Please enable it in your browser settings.");
+      }
+    };
+
+    document.getElementById("stopBtn").onclick = () => {
+      mediaRecorder.stop();
+      document.getElementById("stopBtn").disabled = true;
+    };
+
+    document.getElementById("uploadBtn").onclick = async () => {
+      const formData = new FormData();
+      formData.append("file", audioBlob, "pronunciation.wav");
+
+      try {
+        const res = await fetch("https://204.108.199.80/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        document.getElementById("result").innerHTML = 
+          `✅ Uploaded! <a href="${data.fileUrl}" target="_blank">Listen</a>`;
+        document.getElementById("status").textContent = "Upload complete!";
+      } catch (err) {
+        console.error(err);
+        document.getElementById("status").textContent = "Upload failed.";
+      }
+    };
+  </script>
+</body>
+</html>
