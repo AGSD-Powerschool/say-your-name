@@ -1,83 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Say Your Name</title>
 </head>
 <body>
-  <h3>Say Your Name: Record Your Pronunciation</h3>
+  <h2>Say Your Name: Record Your Pronunciation</h2>
+
+  <label for="studentNumberInput">Student Number:</label>
+  <input type="text" id="studentNumberInput" placeholder="Enter Student Number" required><br><br>
 
   <button id="recordBtn">🎤 Start Recording</button>
   <button id="stopBtn" disabled>⏹️ Stop</button>
-  <p id="status">Waiting to record...</p>
-
-  <audio id="player" controls style="display: none;"></audio>
   <button id="uploadBtn" disabled>⬆️ Upload Recording</button>
+
+  <p id="status"></p>
+  <audio id="player" controls style="display:none;"></audio>
   <p id="result"></p>
 
   <script>
     let mediaRecorder;
     let audioChunks = [];
-
-    const recordBtn = document.getElementById("recordBtn");
-    const stopBtn = document.getElementById("stopBtn");
-    const uploadBtn = document.getElementById("uploadBtn");
-    const player = document.getElementById("player");
-    const status = document.getElementById("status");
-    const result = document.getElementById("result");
+    const recordBtn = document.getElementById('recordBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const status = document.getElementById('status');
+    const player = document.getElementById('player');
+    const UPLOAD_ENDPOINT = 'http://204.108.199.80:3000/upload'; // <-- Change to your actual server URL
 
     recordBtn.onclick = async () => {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        status.innerText = "Microphone access is not supported in this browser.";
+      const studentNumber = document.getElementById("studentNumberInput").value.trim();
+      if (!studentNumber) {
+        alert("Please enter a student number.");
         return;
       }
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
 
-        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
 
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks);
-          const audioUrl = URL.createObjectURL(audioBlob);
-          player.src = audioUrl;
-          player.style.display = "block";
-          uploadBtn.disabled = false;
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        player.src = url;
+        player.style.display = 'block';
+        uploadBtn.disabled = false;
+
+        uploadBtn.onclick = () => {
+          const formData = new FormData();
+          formData.append("audio", blob, "recording.webm");
+          formData.append("studentNumber", studentNumber);
+
+          status.innerText = "Uploading...";
+
+          fetch(UPLOAD_ENDPOINT, {
+            method: "POST",
+            body: formData
+          })
+          .then(res => res.json())
+          .then(data => {
+            status.innerText = "✅ Upload successful!";
+            if (data.viewLink) {
+              const hiddenField = window.parent.document.getElementById("recordingUrlField");
+              if (hiddenField) {
+                hiddenField.value = data.viewLink;
+              }
+              document.getElementById("result").innerHTML = `<a href="${data.viewLink}" target="_blank">🔗 View in Drive</a>`;
+            }
+          })
+          .catch(err => {
+            status.innerText = "❌ Upload failed.";
+            console.error(err);
+          });
         };
+      };
 
-        mediaRecorder.start();
-        status.innerText = "Recording...";
-        recordBtn.disabled = true;
-        stopBtn.disabled = false;
-      } catch (err) {
-        console.error("Mic access error:", err);
-        status.innerText = "Microphone access was blocked. Please allow it in your browser settings.";
-      }
+      mediaRecorder.start();
+      status.innerText = "🎙️ Recording...";
+      recordBtn.disabled = true;
+      stopBtn.disabled = false;
     };
 
     stopBtn.onclick = () => {
       mediaRecorder.stop();
-      status.innerText = "Recording stopped. You can now listen or upload.";
+      recordBtn.disabled = false;
       stopBtn.disabled = true;
-    };
-
-    uploadBtn.onclick = async () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "name-pronunciation.webm");
-
-      status.innerText = "Uploading...";
-      const res = await fetch("https://204.108.199.80/uploads", {
-        method: "POST",
-        body: formData
-      });
-
-      const data = await res.json();
-      result.innerHTML = `✅ Uploaded: <a href="${data.fileUrl}" target="_blank">Listen here</a>`;
-      status.innerText = "Upload complete!";
+      status.innerText = "⏹️ Recording stopped.";
     };
   </script>
 </body>
