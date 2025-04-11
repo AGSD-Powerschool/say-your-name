@@ -70,7 +70,7 @@
       formData.append("audio", audioBlob, "name-pronunciation.webm");
 
       status.innerText = "Uploading...";
-      const res = await fetch("https://204.108.199.80/upload", {
+      const res = await fetch("https://204.108.199.80/uploads", {
         method: "POST",
         body: formData
       });
